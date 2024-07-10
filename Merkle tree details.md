@@ -178,4 +178,7 @@ Run the code and we get the following result:
 ```go
 merkle root is :acbcab8bcc1af95d8d563b77d24c3d19b18f1486383d75a5085c4e86c86beed6
 ```
-
+In bitcoin, it is quit troublesome, all the hashes are in little endian format, before compute the merkle root, we need to reverse their
+order, after getting the merkle root, we still need to reverse it is order to little endian. Therefore when we construct a block instance,
+it will receive a merkle root and a batch of hashes, then we compute a merkle root from the batch of hashes and compare the mekle root it
+has,
