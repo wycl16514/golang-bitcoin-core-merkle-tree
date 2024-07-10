@@ -39,5 +39,43 @@ R: right hash
 Then P=H(L||R), || means connect R to the end of L.
 
 If someone want to proof L is include in P, then he can provide R and P, then we compute L, then connect L and R to compute the hash and 
-check the result is P or not.
+check the result is P or not. Let's do some code instead of only talking, since computer need code to run, create a folder named merkle tree and create a file with name merkle_tree.go and have following 
+code, the first method we write is how to connect give two hash together and compute their parent hash:
+```go
+package merkletree
+
+import (
+	ecc "elliptic_curve"
+)
+
+func MerkleParent(hash1 []byte, hash2 []byte) []byte {
+	buf := make([]byte, 0)
+	buf = append(buf, hash1...)
+	buf = append(buf, hash2...)
+	return ecc.Hash256(string(buf))
+}
+
+}
+```
+Now let's have some test in main.go:
+```go
+package main
+
+import (
+	"encoding/hex"
+	"fmt"
+	merkle "merkletree"
+)
+
+func main() {
+	hash1, _ := hex.DecodeString("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5")
+	hash2, _ := hex.DecodeString("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5")
+	parentHash := merkle.MerkleParent(hash1, hash2)
+	fmt.Printf("parent hash:%x\n", parentHash)
+}
+```
+Running the code we can get the following result:
+```go
+parent hash:8b30c5ba100f6f2e5ad1e2a742e5020491240f8eb514fe97c713c31718ad7ecd
+```
 
