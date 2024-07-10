@@ -40,7 +40,7 @@ Then P=H(L||R), || means connect R to the end of L.
 
 If someone want to proof L is include in P, then he can provide R and P, then we compute L, then connect L and R to compute the hash and 
 check the result is P or not. Let's do some code instead of only talking, since computer need code to run, create a folder named merkle tree and create a file with name merkle_tree.go and have following 
-code, the first method we write is how to connect give two hash together and compute their parent hash:
+code, the first method we write is how to connect give two hash together and compute their parent hash, this is the step 4 aboved:
 ```go
 package merkletree
 
@@ -77,5 +77,105 @@ func main() {
 Running the code we can get the following result:
 ```go
 parent hash:8b30c5ba100f6f2e5ad1e2a742e5020491240f8eb514fe97c713c31718ad7ecd
+```
+
+Now let's see how to do step 3, if there are even number of hashes, we get put two in pair and computing there parent hash using MerkleParent we have done aboved, but if we have odd number, then we need
+to duplicate the last one to make it has even number of hashes, following it is the code :
+```go
+func MerkleParentLevel(hashes [][]byte) [][]byte {
+	/*
+		if there are even number hashes, we put two as pair and compute their merkle parent,
+		if there are odd number, we duplicate the last one, and put two in pair to compute
+		merkle parent
+	*/
+	if len(hashes) == 1 {
+		panic("Can't take parent level with onl y 1 item")
+	}
+
+	if len(hashes)%2 == 1 {
+		//odd number, dpulicate the last one
+		hashes = append(hashes, hashes[len(hashes)-1])
+	}
+
+	parentLevel := make([][]byte, 0)
+	for i := 0; i < len(hashes); i += 2 {
+		parent := MerkleParent(hashes[i], hashes[i+1])
+		parentLevel = append(parentLevel, parent)
+	}
+
+	return parentLevel
+}
+```
+Then we can goto main.go to test aboved code:
+```go
+hashes := make([][]byte, 0)
+	hash, _ := hex.DecodeString("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5")
+	hashes = append(hashes, hash)
+	hash, _ = hex.DecodeString("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5")
+	hashes = append(hashes, hash)
+	hash, _ = hex.DecodeString("f391da6ecfeed1814efae39e7fcb3838ae0b02c02ae7d0a5848a66947c0727b0")
+	hashes = append(hashes, hash)
+	hash, _ = hex.DecodeString("3d238a92a94532b946c90e19c49351c763696cff3db400485b813aecb8a13181")
+	hashes = append(hashes, hash)
+	hash, _ = hex.DecodeString("10092f2633be5f3ce349bf9ddbde36caa3dd10dfa0ec8106bce23acbff637dae")
+	hashes = append(hashes, hash)
+	parentLevel := merkle.MerkleParentLevel(hashes)
+	for _, item := range parentLevel {
+		fmt.Printf("parent item: %x\n", item)
+	}
+
+```
+Run the aboved code we can get the following result:
+```go
+parent item: 8b30c5ba100f6f2e5ad1e2a742e5020491240f8eb514fe97c713c31718ad7ecd
+parent item: 7f4e6f9e224e20fda0ae4c44114237f97cd35aca38d83081c9bfd41feb907800
+parent item: 3ecf6115380c77e8aae56660f5634982ee897351ba906a6837d15ebc3a225df0
+```
+
+Finally let's see how to get the merkle root, as you can see aboved, each time we compute ParentLevel, the number of hashes is halfed, we repeat MerkleParent on previous result continuously until there 
+is only one hash then we done, following is the code:
+```go
+func MerkleRoot(hashes [][]byte) []byte {
+	curLevel := hashes
+	for len(curLevel) > 1 {
+		curLevel = MerkleParentLevel(curLevel)
+	}
+
+	return curLevel[0]
+}
+```
+Then in main.go we can test the code as following:
+```go
+merkleRootHashes := make([][]byte, 0)
+	hash, _ = hex.DecodeString("c117ea8ec828342f4dfb0ad6bd140e03a50720ece40169ee38bdc15d9eb64cf5")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("c131474164b412e3406696da1ee20ab0fc9bf41c8f05fa8ceea7a08d672d7cc5")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("f391da6ecfeed1814efae39e7fcb3838ae0b02c02ae7d0a5848a66947c0727b0")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("3d238a92a94532b946c90e19c49351c763696cff3db400485b813aecb8a13181")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("10092f2633be5f3ce349bf9ddbde36caa3dd10dfa0ec8106bce23acbff637dae")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("7d37b3d54fa6a64869084bfd2e831309118b9e833610e6228adacdbd1b4ba161")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("8118a77e542892fe15ae3fc771a4abfd2f5d5d5997544c3487ac36b5c85170fc")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("dff6879848c2c9b62fe652720b8df5272093acfaa45a43cdb3696fe2466a3877")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("b825c0745f46ac58f7d3759e6dc535a1fec7820377f24d4c2c6ad2cc55c0cb59")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("95513952a04bd8992721e9b7e2937f1c04ba31e0469fbe615a78197f68f52b7c")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("2e6d722e5e4dbdf2447ddecc9f7dabb8e299bae921c99ad5b0184cd9eb8e5908")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	hash, _ = hex.DecodeString("b13a750047bc0bdceb2473e5fe488c2596d7a7124b4e716fdd29b046ef99bbf0")
+	merkleRootHashes = append(merkleRootHashes, hash)
+	merkleRoot := merkle.MerkleRoot(merkleRootHashes)
+	fmt.Printf("merkle root is :%x\n", merkleRoot)
+```
+Run the code and we get the following result:
+```go
+merkle root is :acbcab8bcc1af95d8d563b77d24c3d19b18f1486383d75a5085c4e86c86beed6
 ```
 
