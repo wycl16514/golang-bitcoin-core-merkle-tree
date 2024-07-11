@@ -200,4 +200,250 @@ blue box and we can compute the merkle root for a check in the following step:
 
 6, H(ABCDEFGHIJKLMNOP) = MerkleParent(H(ABCDEFGH), H(IJKLMNOP))
 
-As we can see, the merkle root is a kind of compression algorithm, we need only part of the information can we get to the conclusion.
+As we can see, the merkle root is a kind of compression algorithm, we need only part of the information can we get to the conclusion. But we still have problems for aboved computation, How do we know we
+need to pair H(k), H(L) to get the merkle parent, how do we know we need to pair H(NM), H(OP) to get merkle parent? We need some info th deduce such info.
+
+The info we need is the position of those blue boxes, and we need to define the "position" of the box in the binary tree structure. The "position" of a node in a tree related to how
+we "traval" the tree, if you have backgroud of basic data structure and algorithm you will know there is a kind of data structure called "graph", the tree aboved is binary tree and it is a kind of graph.
+
+For graph which contains "nodes and edges", if given one node, we can go to other nodes by using the edges coming from the given node, then we have two kinds of ways to "traval" the graph, breath first 
+and depth first:
+
+![image](https://github.com/wycl16514/golang-bitcoin-core-merkle-tree/assets/7506958/09a58967-2323-4838-b1e8-643d119703e9)
+
+As you can see from the image aboved, for breath first traval, we visit the node layer by layer, we first at the root node 0, then we visit all nodes below it that are node 1, 2, 3, then we goto layer 2,
+visit all nodes there that are nodes 4,5,6,7. The order for each node which they are visited is their "position". The depth first traval will a little bit complex, when we in a given node, we first check
+if we can goto the lower layer from left edge, if we can then we go down to the lower layer. If we can't go down to the lowe layer from the left edge(there is not left edge or we have alread been there),
+then we try whether we can go down by using the right edge, if we can then we go down to the lowe layer by using the right edge. Otherwise we go up to the parent node and do the same again, the order for
+the node that is being visited is the "position" of that node, you can see nodes will have different order or "position" for these two traval ways.
+
+When the full node return hashes for the blue boxes, it will also return their order under the depth first traval, then we will use the order and the given hash value to reconstruct the merkle root.
+Let's go through the whole process step by step:
+
+the first step we need to achive is given a list of objects, we need to convert it to tree like structure:
+
+![merkle tree](https://github.com/wycl16514/golang-bitcoin-core-merkle-tree/assets/7506958/d7558472-b2fd-4842-91c2-7a1aac6145e9)
+
+
+As you can see from aboved image, we have 8 nodes in list, if we want to construct a merkle tree from these 8 nodes, we can set these 8 nodes as the leaves, and pair two as a group then "grow"
+its parent, therefore for 8 nodes, we can "grow out" 4 parents in the second layer, the same process can repeat again and again until we have only one node. Since the number of nodes is half 
+when it comes up to one layer, given N nodes, we can have most int(lg(N)+1) layers
+
+Let's write a function for this, given a number N, we return a two dimension array, the first dimension with number to the layer, and the second dimension with nodes for each layer:
+```go
+func ConstructTree(n int32) [][][]byte {
+	/*
+		each element is a hash string with 32 bytes, that's why we need three dimensional
+		slice
+	*/
+	maxDepth := math.Ceil(math.Log2(float64(n))) + 1
+	merkleTree := make([][][]byte, 0)
+	for depth := 0; depth < int(maxDepth); depth += 1 {
+		/*
+			in layer t, the number of nodes in the layer should be 2^t,
+			for example given list of 27 items, the depth of the tree is ceil(lg(27)) == 5,
+			then the whole tree will contains 32 nodes
+		*/
+		layer := make([][]byte, 0)
+		nodesInLayer := int(math.Pow(2.0, float64(depth)))
+		for i := 0; i < nodesInLayer; i++ {
+			layer = append(layer, []byte{})
+		}
+		merkleTree = append(merkleTree, layer)
+	}
+
+	return merkleTree
+}
+```
+
+Then we can run the method like following:
+```go
+func main() {
+	merkleTree := merkle.ConstructTree(27)
+	for _, level := range merkleTree {
+		fmt.Printf("%d\n", level)
+	}
+}
+```
+The aboved code will give following output:
+[[]]
+[[] []]
+[[] [] [] []]
+[[] [] [] [] [] [] [] []]
+[[] [] [] [] [] [] [] [] [] [] [] [] [] [] [] []]
+
+When we convert 27 objects into tree like structure, the first layer will contains one element, the second contains 2, and so on. Now let's coding a merkle tree as following:
+```go
+type MerkleTree struct {
+	total int
+	nodes [][][]byte
+	//combine currentDepth and currentIndex we point to a given node
+	currentDepth int32
+	currentIndex int32
+	maxDepth     int32
+}
+
+func NewMerkleTree(hashes [][]byte) *MerkleTree {
+	merkleTree := &MerkleTree{
+		total:        len(hashes),
+		currentDepth: 0,
+		currentIndex: 0,
+		maxDepth:     int32(math.Ceil(math.Log2(float64(len(hashes))))),
+	}
+
+	merkleTree.nodes = ConstructTree(int32(merkleTree.total))
+	//set up the lowest layer
+	for idx, hash := range hashes {
+		merkleTree.nodes[merkleTree.maxDepth][idx] = hash
+	}
+	//set up nodes in up layer
+	for len(merkleTree.Root()) == 0 {
+		if merkleTree.IsLeaf() {
+			merkleTree.Up()
+		} else {
+			/*
+				in ordre to compute the hash of current node, we need to get the value of its
+				left child and right child, if the left child is nil, then we compute the value
+				of its left child, if the right child is nil, then we compute the value of right
+				child, when both childs have their value, then we can compute the value of
+				current node, this is just like the post-order traval of binary tree
+			*/
+			leftHash := merkleTree.GetLeftNode()
+			rightHash := merkleTree.GetRightNode()
+			if len(leftHash) == 0 {
+				merkleTree.Left()
+			} else if len(rightHash) == 0 {
+				merkleTree.Right()
+			} else {
+				//both left and right childs are ready, set the current node
+				merkleTree.SetCurrentNode(MerkleParent(leftHash, rightHash))
+				merkleTree.Up()
+			}
+		}
+	}
+	return merkleTree
+}
+
+func (m *MerkleTree) String() string {
+	result := make([]string, 0)
+	for depth, level := range m.nodes {
+		items := make([]string, 0)
+		for index, h := range level {
+			short := "nil"
+			if len(h) != 0 {
+				//only print out first 8 digits of the hash value
+				short = fmt.Sprintf("%x...", h[:4])
+			}
+			if depth == int(m.currentDepth) && index == int(m.currentIndex) {
+				//current node is being pointed to,then we just show 6 digits with two *
+				items = append(items, fmt.Sprintf("*%x*", h[:3]))
+			} else {
+				items = append(items, short)
+			}
+		}
+
+		result = append(result, strings.Join(items, ","))
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func (m *MerkleTree) Up() {
+	//point to current node's parent
+	if m.currentDepth > 0 {
+		m.currentDepth -= 1
+	}
+	m.currentIndex /= 2
+}
+
+func (m *MerkleTree) Left() {
+	m.currentDepth += 1
+	m.currentIndex *= 2
+}
+
+func (m *MerkleTree) Right() {
+	m.currentDepth += 1
+	m.currentIndex = m.currentIndex*2 + 1
+}
+
+func (m *MerkleTree) Root() []byte {
+	return m.nodes[0][0]
+}
+
+func (m *MerkleTree) SetCurrentNode(value []byte) {
+	m.nodes[m.currentDepth][m.currentIndex] = value
+}
+
+func (m *MerkleTree) GetCurrentNode() []byte {
+	return m.nodes[m.currentDepth][m.currentIndex]
+}
+
+func (m *MerkleTree) GetLeftNode() []byte {
+	return m.nodes[m.currentDepth+1][m.currentIndex*2]
+}
+
+func (m *MerkleTree) GetRightNode() []byte {
+	return m.nodes[m.currentDepth+1][m.currentIndex*2+1]
+}
+
+func (m *MerkleTree) IsLeaf() bool {
+	return m.currentDepth == m.maxDepth
+}
+
+func (m *MerkleTree) RightExist() bool {
+	/*
+		If the number of leaves is not power of 2, then some nodes may not
+		have right child
+	*/
+	return len(m.nodes[m.currentDepth+1]) > int(m.currentIndex)*2+1
+}
+
+```
+Then we can test aboved code in main.go as following:
+```go
+merkleTreeHashes := make([][]byte, 0)
+	hash, _ := hex.DecodeString("9745f7173ef14ee4155722d1cbf13304339fd00d900b759c6f9d58579b5765fb")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("5573c8ede34936c29cdfdfe743f7f5fdfbd4f54ba0705259e62f39917065cb9b")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("82a02ecbb6623b4274dfcab82b336dc017a27136e08521091e443e62582e8f05")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("507ccae5ed9b340363a0e6d765af148be9cb1c8766ccc922f83e4ae681658308")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("a7a4aec28e7162e1e9ef33dfa30f0bc0526e6cf4b11a576f6c5de58593898330")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("bb6267664bd833fd9fc82582853ab144fece26b7a8a5bf328f8a059445b59add")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("ea6d7ac1ee77fbacee58fc717b990c4fcccf1b19af43103c090f601677fd8836")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("457743861de496c429912558a106b810b0507975a49773228aa788df40730d41")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("7688029288efc9e9a0011c960a6ed9e5466581abf3e3a6c26ee317461add619a")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("b1ae7f15836cb2286cdd4e2c37bf9bb7da0a2846d06867a429f654b2e7f383c9")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("9b74f89fa3f93e71ff2c241f32945d877281a6a50a6bf94adac002980aafe5ab")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("b3a92b5b255019bdaf754875633c2de9fec2ab03e6b8ce669d07cb5b18804638")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("b5c0b915312b9bdaedd2b86aa2d0f8feffc73a2d37668fd9010179261e25e263")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("c9d52c5cb1e557b92c84c52e7c4bfbce859408bedffc8a5560fd6e35e10b8800")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("c555bc5fc3bc096df0a0c9532f07640bfb76bfe4fc1ace214b8b228a1297a4c2")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+	hash, _ = hex.DecodeString("f9dbfafc3af3400954975da24eb325e326960a25b87fffe23eef3e7ed2fb610e")
+	merkleTreeHashes = append(merkleTreeHashes, hash)
+
+	tree := merkle.NewMerkleTree(merkleTreeHashes)
+	fmt.Printf("%s\n", tree)
+
+```
+Running the aboved code we have the following result:
+```go
+*597c4b*
+6382df3f...,87cf8fa3...
+3ba6c080...,8e894862...,7ab01bb6...,3df760ac...
+272945ec...,9a38d037...,4a64abd9...,ec7c95e1...,3b67006c...,850683df...,d40d268b...,8636b7a3...
+9745f717...,5573c8ed...,82a02ecb...,507ccae5...,a7a4aec2...,bb626766...,ea6d7ac1...,45774386...,76880292...,b1ae7f15...,9b74f89f...,b3a92b5b...,b5c0b915...,c9d52c5c...,c555bc5f...,f9dbfafc...
+```
