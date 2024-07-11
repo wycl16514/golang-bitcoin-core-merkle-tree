@@ -178,7 +178,12 @@ Run the code and we get the following result:
 ```go
 merkle root is :acbcab8bcc1af95d8d563b77d24c3d19b18f1486383d75a5085c4e86c86beed6
 ```
-In bitcoin, it is quit troublesome, all the hashes are in little endian format, before compute the merkle root, we need to reverse their
-order, after getting the merkle root, we still need to reverse it is order to little endian. Therefore when we construct a block instance,
-it will receive a merkle root and a batch of hashes, then we compute a merkle root from the batch of hashes and compare the mekle root it
-has,
+Using merkle tree we can achive proof of inclusion, for example you have a list of objects , and you want to check your peer has the same set of objects, then you compute the merkle root on L and 
+let the peer compute the merkle root, then you compare two roots, if they are the same, then it is proof your peer also have the same list of objects. In application to the bitcoin, if we want to know
+whether a batch of transactions have included in the block or not, we can compute the merkle root instead of getting all transactions from the block and checking them one by one.
+
+As shown by the following image:
+![image](https://github.com/wycl16514/golang-bitcoin-core-merkle-tree/assets/7506958/8e79a944-601e-4845-be1e-00c4246c6d2f)
+
+
+
