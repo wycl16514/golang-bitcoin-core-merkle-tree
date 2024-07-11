@@ -185,5 +185,19 @@ whether a batch of transactions have included in the block or not, we can comput
 As shown by the following image:
 ![image](https://github.com/wycl16514/golang-bitcoin-core-merkle-tree/assets/7506958/8e79a944-601e-4845-be1e-00c4246c6d2f)
 
+If we have two transactions H(k), H(N), and we want to make sure whether these two transaction have already inlcuded in a block, then the bicoin full node can only return hashes that are represent by the
+blue box and we can compute the merkle root for a check in the following step:
 
+1, H(KL) = MerkleParent(H(k), H(L))
 
+2, H(MN) = MerkleParent(H(M), H(N))
+
+3, H(IJKL) = MerkleParent(H(IJ), H(KL))
+
+4, H(MNOP) = MerkleParent(H(MN), H(OP))
+
+5, H(IJKLMNOP) = MerkleParent(H(IJKL), H(MNOP))
+
+6, H(ABCDEFGHIJKLMNOP) = MerkleParent(H(ABCDEFGH), H(IJKLMNOP))
+
+As we can see, the merkle root is a kind of compression algorithm, we need only part of the information can we get to the conclusion.
