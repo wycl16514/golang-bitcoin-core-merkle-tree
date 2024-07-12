@@ -42,5 +42,6 @@ ac6bfe426f6e2bb457f1c554866eb69dcb8d6bf6f880e9a59b3cd053e6c7060eeacaacf4dac6697d
 9, the final 4 bytes is named flag bits: 3b55635
 
 The first 6 fields are the same as getheader command, the last 4 fields are use for proof-of-inclusion. The value from step 7 is the number of hash values in the list as we metioned in
-previous sector,
+previous sector, Let's write the code for parsing a merkle block, create a new file named merkleblock.go, and have the following code:
+
 
