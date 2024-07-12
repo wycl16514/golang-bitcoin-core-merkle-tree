@@ -222,7 +222,7 @@ Let's go through the whole process step by step:
 
 the first step we need to achive is given a list of objects, we need to convert it to tree like structure:
 
-![merkle tree](https://github.com/wycl16514/golang-bitcoin-core-merkle-tree/assets/7506958/d7558472-b2fd-4842-91c2-7a1aac6145e9)
+![merkle tree](https://github.com/user-attachments/assets/07596327-13af-4577-be56-1f40a64bcee3)
 
 
 As you can see from aboved image, we have 8 nodes in list, if we want to construct a merkle tree from these 8 nodes, we can set these 8 nodes as the leaves, and pair two as a group then "grow"
