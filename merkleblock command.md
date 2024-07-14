@@ -205,7 +205,129 @@ ce6327f982624be78f9d917b3fda5ffc06e59f3e8582fab8db50151e836172ee,
 4c2717f99abeee84838402bd46cf5a828cb5f5671c1ef8a9900743e35379abd1,
 6122b61c413a297dd486f8549c8d2544d610def0de7779a1238ad5a5281abbdf,
 flags: b55635
-
 ```
+We will compute the merkle root base on the hashes and flags. Let's see how we can do that, we still using the merkle tree before as example:
+
+<img width="969" alt="截屏2024-07-14 16 01 25" src="https://github.com/user-attachments/assets/d6e97bb8-93cc-4ead-bb6a-955868947696">
+
+
+If a block contains trasactions as show at the lowest layer of aboved image, then the payload of  mekleblock will contains hashes from blue and green boxes, as you can see there are numbers attach to
+given nodes, that's the order when we using depth-first traval to visit the tree. At first we are at the root H(ABCDEFGHIGKHMNOP), then we visit its left child, since the hash value of this node is
+already given, therefore we don't need to goto children of H(ABCDEFGH), and we return back to H(ABCDEFGHIGKHMNOP) and vist its right child that is H(IJKLMNOP), that's why node H(ABCDEFGHIGKHMNOP) has
+order 1, node  H(ABCDEFGH) has order 2 and node H(IJKLMNOP) has order 3.
+
+As we can see from the image, node H(IJKLMNOP) is dashed which means the payload of merkleblock dose not contain its hash value, we need to compute it by our self, therefore we need to get the value of
+its left child first which is node(IJKL), that's why this node has order 4, and since node H(IJKL) is dashed which means we don't have its hash value, we need to compute it by our self, then we goto get
+the value of its left child, then we goto  node H(IJ) that's why it has number 5, since its blue box, which means its hash value is contained in the payload, then we don't need to goto its children 
+anymore. Then we goback to H(IJKL) and goto its right child H(KL), that's why it has number 6,  its dashed which means we don't has its hash value, then we need to get value of its left and right child,
+we go to its left child H(k) first, that's why it has number 7, since this node is green which means its value contained in the payload, and we goback to H(KL) and goto H(L) that's why it has number 8
+, since H(L) is blue  which means we have its hash value, then we go back to H(KL) and compute its value, and we go back to H(IJKL) and compute its value. Since we have value for node H(IJKL) then we 
+back to H(IJKLMNOP) and go to its right child H(MNOP), since this node is the ninth node we visit that's why it has number 9, since its dashed which means its value need to be computed, then we goto
+its left child H(MN), it is the tenth node we visited that's why it has number 10.
+
+Since node H(MN) is dashed we need to compute its value, then we goto its left child H(M), this node is the eleventh node we visited that's why it has number 11, since it is blue box that means its hash
+values is contained in payload then we goback to H(MN) and goto its right child H(N), this node is twelveth node we visited that's why it has number 12, since its green node, we have its hash value in
+payload, then we go back to H(MN) and compute its value, now we return back to H(MNOP) and goto its right child H(OP), since its Thirteenth node we visited, that's why it has number 13, since its blue
+box, we have its hash value in payload, therefore we can goback to H(MNOP) and compute its value.
+
+Since we have value for node H(IJKL) and H(MNOP) then we can compute hash value for node H(IJKLMNOP), then we can compute the value of the root.
+
+Let's see the hashes filed and flagBits related to the tree:
+
+hashs: [H(ABCDEFG), H(IJ), H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits: 1, 0, 1, 1, 0, 1, 1, 0, 1, 1,  0, 1, 0
+
+Now how we can get the value of the root by fields aboved? The process is like following
+
+1, At beginning we are at the root node H(ABCDEFGHIJKLMNOP), and the first bit value is 1, when the current bit value is 1 and the current node is an internal node, which means the value of current
+node need to be compute, then we goto its left child and remove the first bit, now the hashes and flag bits field are like following:
+
+hashs: [H(ABCDEFG), H(IJ), H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits:  0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0
+
+2, Now we at node H(ABCDEFGH), the current value of bit is 0, which means the hash value of current node is in hashes, then we get the hash value from hashes and goto the right child of root
+which is H(IJKLMNOP), and new values of hashes and flag bits are following:
+
+hashs: [H(IJ), H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits:  1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0
+
+The current bit value is 1 and the current node is an internal node, which meas we don't have its hash value, therefore we goto its left child H(IJKL) and remove the first bit. Then we are at node
+H(IJKL) and the hashes and flag bits are as following:
+
+hashs: [H(IJ), H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits:   1, 0, 1, 1, 0, 1,  1, 0, 1, 0
+
+The current node is H(IJKL), and the current first bit is 1, since node H(IJKL) is an internal node and the bit value is 1, which means we don't have the current hash value of the node, then we need
+to goto its left child which is H(IJ), and we remove the current first bit, when we are at node H(IJ), the hashes and flat bits are following:
+
+hashs: [H(IJ), H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits:    0, 1, 1, 0, 1,  1, 0, 1, 0
+
+Since the current first bit is 0, which means we have the hash value of the current node, therefore we take the first hash value and remove the first bit and goto the right child of H(IJKL) which is
+H(KL), when we are at H(KL) the hashes and flag bits are as following:
+
+hashs: [ H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits: 1, 1, 0, 1,  1, 0, 1, 0
+
+Since the first bit is 1 and the current node is an internal node, which means we don't have its hash value, then we remove the first bit and goto the left child which is node H(K), when we are at node
+H(K), the hashes and flag bits are as following:
+
+hashs: [ H(K), H(L), H(M), H(N), H(N), H(OP)]
+flag bits: 1, 0, 1, 1,  0, 1, 0
+
+This time we are at node H(k) and the bit value is 1, we need to pay attention to this, when a node is leaf and the bit is 1 which means the hash value of current node is what we want to query, want send
+the hash value of this node to query whether a block has inlcude the given transaction or not, therefore we have the hash value of the current node. then we take the value from hashes and remove the 
+current bit and we goto the right child of H(KL) which is H(L), when we are at node H(L), the hashes and flag bits are as following:
+
+hashs: [ H(L), H(M), H(N), H(N), H(OP)]
+flag bits: 0, 1,  1, 0, 1, 0
+
+Since the current bit value is 0, which means we have the hash value for the current node, then we remove the current bit and take the hash value from hashes and goback to node H(KL), and compute its
+value. Since we have hash value for node H(IJ) and H(KL), then we can compute the value of H(IJKL), then we go to the right child of node H(IJKLMNOP) which is H(MNOP), when we at node H(MNOP),field 
+hashes and flag bits are following:
+
+hashs: [ H(M), H(N), H(N), H(OP)]
+flag bits: 1,  1, 0, 1, 0
+
+The current bit value is 1 and the current node H(MNOP) is an internal node, which means we don't have its hash value, then we need to get the value of its children first, then we remove the first bit
+from flag bits, and go to its left child which is H(MN), and hashes and flag bits are following:
+
+hashs: [ H(M), H(N), H(N), H(OP)]
+flag bits:  1, 0, 1, 0
+
+The current bit value is 1, and the curent node H(MN) is an internal node, which means we don't have its hash value, we need to get the value of its children first, therefore we remove the first bit and 
+go to its left child H(M), then the hashes and flag bits are following:
+
+hashs: [ H(M), H(N), H(N), H(OP)]
+flag bits:  0, 1, 0
+
+The first bit is value of 0, wihch means we have the hash value of the current node, then we take the value from hashes for node H(M) and remove the current first bit and go to the right child of H(MN)
+which is H(N), now field hashes and flag bits are as following:
+
+hashs: [  H(N), H(N), H(OP)]
+flag bits:  1, 0
+
+The current bit value is 1 and the current node H(N) is leaf, which means the hash value of the current node is the transaction by which we are quering for, that is the current node is green, then we 
+have its value in hashes, then we take the hash value from hashes and remove the current bit from flag bits, and the current hashes and flag bits are following:
+
+hashs: [    H(OP)]
+flag bits:   0
+
+Now we are at node H(MN), since we have values for its two childs, then we can compute the value of H(MN), and go to node H(OP), since the current bit value is 0, which means we have the hash value for
+the current node, then we take the value from hashes and remove the current bit:
+
+hashes: []
+flag bits: 
+
+Now we have value for node H(OP) and we return to node H(MNOP), since we have hash value for its two children then we can compute the value of H(MNOP), after getting the value for node H(MNOP) we return
+to node H(IJKLMNOP) then we have value for its children, then we can compute the value for node H(IJKLMNOP), Then we go back to the root, at this time we have value for both child of the root and we can
+compute the value of root.
+
+As we can see, when the current bit value is 0, which means we have the hash value of current node in the filed of hashes, if the current bit value is 1 then we need to check the node, if the node is
+an internal node, then 1 means we don't have its value, if the node is leaf, then this node is the transaction we are quering for, and of course we have its value in hashes.
+
+
+
+
 
 
