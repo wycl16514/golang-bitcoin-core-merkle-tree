@@ -326,6 +326,181 @@ compute the value of root.
 As we can see, when the current bit value is 0, which means we have the hash value of current node in the filed of hashes, if the current bit value is 1 then we need to check the node, if the node is
 an internal node, then 1 means we don't have its value, if the node is leaf, then this node is the transaction we are quering for, and of course we have its value in hashes.
 
+Let's see how to implement the steps aboved, first we need to fix some bugs, For ConstructTree, we build a fully binary tree which is wrong, we need to make sure number of nodes in lowest laywer shoul
+equal to the given number, therefore wew change the method as following:
+
+```go
+func ConstructTree(n int32) [][][]byte {
+	/*
+	   bug fix, we should not make a full binary tree, we should make sure
+	   the number of nodes in the lowest layer equals to the given number
+
+	   the lowest layer has n nodes, and when up one layer, the number
+	   of node cut to half, therefore for n nodes, we have at most
+	   Ceil(lg(n)) + 1 layers. for n = 8, we have 1+lg(8) = 4 layers
+	*/
+	maxDepth := math.Ceil(math.Log2(float64(n))) + 1
+	merkleTree := make([][][]byte, int(maxDepth))
+	nodesInLayer := int(n)
+	for depth := maxDepth; depth > 0; depth-- {
+		layer := make([][]byte, 0)
+
+		for i := 0; i < nodesInLayer; i++ {
+			layer = append(layer, []byte{})
+		}
+
+		merkleTree[int(depth-1)] = layer
+		if nodesInLayer%2 == 0 {
+			nodesInLayer = nodesInLayer / 2
+		} else {
+			nodesInLayer = (nodesInLayer + 1) / 2
+		}
+	}
+
+	return merkleTree
+}
+
+```
+After the fix, when we construct a tree with 27 nodes at total, we will have the following result:
+```go
+[[]]
+[[] []]
+[[] [] [] []]
+[[] [] [] [] [] [] []]
+[[] [] [] [] [] [] [] [] [] [] [] [] [] []]
+[[] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] [] []]
+```
+We can see there are exactly 27 nodes in the lowest layer, and the last node in the second lowest layer has not right child. Another fix is for BytesToBitsField, we need to reverse the ordering of 
+bits:
+```go
+func BytesToBitsField(bytes []byte) []string {
+	flagBits := make([]string, 0)
+	for _, byteVal := range bytes {
+		//bug fix, need to reverse the ordering of bits!
+		flagBits = append(flagBits, reverse.String(fmt.Sprintf("%08b", byteVal)))
+	}
+
+	return flagBits
+}
+```
+Now let's use code to implement steps aboved, in merkle.go:
+```go
+func InitEmptyMerkleTree(total int) *MerkleTree {
+	merkleTree := &MerkleTree{
+		total:        total,
+		currentDepth: 0,
+		currentIndex: 0,
+		maxDepth:     int32(math.Ceil(math.Log2(float64(total)))),
+	}
+	merkleTree.nodes = ConstructTree(int32(total))
+
+	return merkleTree
+}
+
+func (m *MerkleTree) PopluateTree(flagBits string, hashes [][]byte) {
+	for len(m.Root()) == 0 {
+		/*
+			get the value of current bit, if it is 0 then, we can get hash value
+			from hashes. if it is 1 and the current node is an internal node,
+			then we need to get the value for its children, if it is 1 and
+			the node is leaf, then we can get hash value from hashes
+		*/
+
+		if m.IsLeaf() {
+			//for leaf we always has its value in hashes
+			flagBits = flagBits[1:]
+			//value for the node can get from hashes
+			m.SetCurrentNode(hashes[0])
+			//remove the hash value
+			hashes = hashes[1:]
+			m.Up()
+		} else {
+			leftHash := m.GetLeftNode()
+			/*
+				if both the left child is emptry,
+				which means we visit the current node first time and
+				we can remove the current bit, otherwise current node
+				is not the first time we are visited then we can't remove
+				the current bit because the current bit is not belongs to
+				this node
+			*/
+			if len(leftHash) == 0 {
+				if flagBits[0] == '0' {
+					//we have current node's value in hashes
+					m.SetCurrentNode(hashes[0])
+					hashes = hashes[1:]
+					//we don't need to visit its children any more
+					m.Up()
+				} else {
+					m.Left()
+				}
+				//we only remove current bit if we are first visit to the node
+				flagBits = flagBits[1:]
+			} else if m.RightExist() {
+				rightHash := m.GetRightNode()
+				if len(rightHash) == 0 {
+					m.Right()
+				} else {
+					//both left and right child ready
+					m.SetCurrentNode(MerkleParent(leftHash, rightHash))
+					m.Up()
+				}
+			} else {
+				//duplicate the left child
+				m.SetCurrentNode(MerkleParent(leftHash, leftHash))
+				m.Up()
+			}
+		}
+	}
+
+	if len(hashes) != 0 {
+		panic("hahses not all consumed")
+	}
+	for _, bit := range flagBits {
+		//if we still have bit value of 1, which means there are nodes left
+		//without handled
+		if bit != '0' {
+			panic("flag bits not all consumed")
+		}
+	}
+}
+
+```
+The method of InitEmptyMerkleTree create a merkle tree with given nodes in lowest layer and set each node to empty. The method PopluateTree is executing the steps aboved. In merkleblock.go we add
+a method to get the root of merkle tree and compare the result with the merkle root given by the command of merkleblock:
+```go
+func (m *MerkleBlock) IsValid() bool {
+	flagBits := strings.Join(BytesToBitsField(m.flagBits), "")
+	merkleTree := InitEmptyMerkleTree(int(m.totalTransactions.Int64()))
+	//when compute merkle root, we need all hash in little endian format
+	hashes := make([][]byte, 0)
+	for _, hash := range m.hashes {
+		hashes = append(hashes, transaction.ReverseByteSlice(hash))
+	}
+	merkleTree.PopluateTree(flagBits, hashes)
+	//need to reverse the byte order of the root
+	return bytes.Equal(m.merkleRoot, transaction.ReverseByteSlice(merkleTree.Root()))
+}
+```
+We need to notice that, when compute the merkle root, we need all hashes in little endian format! And After getting the merkle root we need to revserse its byte order and then we compare the result
+with the given field of merkleRoot. In main.go we call the IsValid method as following:
+```go
+payload, err := hex.DecodeString("00000020df3b053dc46f162a9b00c7f0d5124e2676d47bbe7c5d0793a500000000000000ef445fef2ed495c275892206ca533e7411907971013ab83e3b47bd0d692d14d4dc7c835b67d8001ac157e670bf0d00000aba412a0d1480e370173072c9562becffe87aa661c1e4a6dbc305d38ec5dc088a7cf92e6458aca7b32edae818f9c2c98c37e06bf72ae0ce80649a38655ee1e27d34d9421d940b16732f24b94023e9d572a7f9ab8023434a4feb532d2adfc8c2c2158785d1bd04eb99df2e86c54bc13e139862897217400def5d72c280222c4cbaee7261831e1550dbb8fa82853e9fe506fc5fda3f7b919d8fe74b6282f92763cef8e625f977af7c8619c32a369b832bc2d051ecd9c73c51e76370ceabd4f25097c256597fa898d404ed53425de608ac6bfe426f6e2bb457f1c554866eb69dcb8d6bf6f880e9a59b3cd053e6c7060eeacaacf4dac6697dac20e4bd3f38a2ea2543d1ab7953e3430790a9f81e1c67f5b58c825acf46bd02848384eebe9af917274cdfbb1a28a5d58a23a17977def0de10d644258d9c54f886d47d293a411cb6226103b55635")
+	if err != nil {
+		panic(err)
+	}
+
+	merkleBlock := merkle.ParseMerkleBlock(payload)
+	fmt.Printf("%s\n", merkleBlock)
+
+	fmt.Printf("validate merkleblock result:%v\n", merkleBlock.IsValid())
+```
+The code aboved will give following result:
+```go
+validate merkleblock result:true
+```
+
+
 
 
 
